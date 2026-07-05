@@ -466,6 +466,9 @@ class YouTubeDownloader:
             result = await self._do_download_audio(url, progress_callback, opts=primary_opts)
             self._log_download_metric("download_audio", t_start, primary_name, "m4a", result.file_path, routing)
             return result
+        except FileTooLargeError:
+            # размер не починится сменой источника — пробрасываем сразу, без алерта
+            raise
         except Exception as e:
             logger.warning("%s не сработал (аудио): %s", primary_name, e)
             self._fire_source_failed(primary_name, e)
@@ -480,6 +483,8 @@ class YouTubeDownloader:
                 result = await self._do_download_audio(url, progress_callback, opts=alt_opts)
                 self._log_download_metric("download_audio", t_start, alt_name, "m4a", result.file_path, routing)
                 return result
+            except FileTooLargeError:
+                raise
             except Exception as e:
                 logger.warning("%s не сработал (аудио): %s", alt_name, e)
                 self._fire_source_failed(alt_name, e)
@@ -491,6 +496,8 @@ class YouTubeDownloader:
                 result = await self._do_download_audio(url, progress_callback, opts=self._proxy_cookies_opts())
                 self._log_download_metric("download_audio", t_start, "proxy+cookies", "m4a", result.file_path, routing)
                 return result
+            except FileTooLargeError:
+                raise
             except Exception as e:
                 logger.warning("Прокси+cookies не сработали (аудио): %s", e)
                 self._fire_source_failed("proxy+cookies", e)
@@ -502,6 +509,8 @@ class YouTubeDownloader:
                 result = await self._do_download_audio(url, progress_callback, opts=self._proxy_fallback_opts())
                 self._log_download_metric("download_audio", t_start, "proxy+ios", "m4a", result.file_path, routing)
                 return result
+            except FileTooLargeError:
+                raise
             except Exception as e:
                 logger.warning("Прокси+ios не сработали (аудио): %s", e)
                 self._fire_source_failed("proxy+ios", e)
@@ -603,26 +612,38 @@ class YouTubeDownloader:
     def _download(self, url: str, opts: dict, progress_callback: ProgressCallback = None) -> dict:
         import yt_dlp
 
-        if progress_callback:
-            last_update = {"time": 0}
+        last_update = {"time": 0}
 
-            def _hook(d):
-                if d["status"] != "downloading":
-                    return
-                now = time.time()
-                if now - last_update["time"] < 3:
-                    return
-                last_update["time"] = now
+        def _hook(d):
+            if d["status"] != "downloading":
+                return
 
-                downloaded = d.get("downloaded_bytes", 0)
-                total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
-                if total > 0:
-                    percent = int(downloaded / total * 100)
-                    dl_mb = downloaded / 1024 / 1024
-                    total_mb = total / 1024 / 1024
-                    progress_callback(dl_mb, total_mb, percent)
+            downloaded = d.get("downloaded_bytes", 0)
+            total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
 
-            opts["progress_hooks"] = [_hook]
+            # ранний обрыв: не тянем то, что заведомо больше лимита Telegram.
+            # проверяем и оценку размера, и уже скачанное — рвём как можно раньше,
+            # чтобы не качать все 11 ГБ впустую и только потом отбраковывать.
+            if total > MAX_FILE_SIZE or downloaded > MAX_FILE_SIZE:
+                biggest = max(total, downloaded)
+                raise FileTooLargeError(
+                    f"Файл слишком большой ({biggest / 1024 / 1024:.0f} МБ)"
+                )
+
+            # прогресс юзеру шлём с троттлингом (лимит Telegram на редактирование)
+            if not progress_callback:
+                return
+            now = time.time()
+            if now - last_update["time"] < 3:
+                return
+            last_update["time"] = now
+            if total > 0:
+                percent = int(downloaded / total * 100)
+                dl_mb = downloaded / 1024 / 1024
+                total_mb = total / 1024 / 1024
+                progress_callback(dl_mb, total_mb, percent)
+
+        opts["progress_hooks"] = [_hook]
 
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=True)

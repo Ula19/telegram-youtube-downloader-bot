@@ -34,7 +34,7 @@ services:
       TELEGRAM_API_HASH: ${API_HASH}
       TELEGRAM_LOCAL: 1
     ports:
-      - "${BOT_API_PORT:-8081}:8081"
+      - "${BOT_API_PORT:-8100}:8081"
     volumes:
       - bot-api-data:/var/lib/telegram-bot-api
       - /tmp/yt_bot:/tmp/yt_bot
