@@ -1,12 +1,19 @@
-"""Сервис скачивания YouTube — yt-dlp через Cloudflare WARP
-WARP = бесплатный VPN, YouTube не блокирует IP Cloudflare.
-Cookies не нужны — WARP обходит блокировку датацентровых IP.
-Fallback: cookies → ios/android (если WARP упал).
+"""Сервис скачивания YouTube — yt-dlp через пул Cloudflare WARP + PO-token.
+
+Архитектура (2026):
+- PO-token (bgutil) добавляется во ВСЕ запросы → снимает "Sign in to confirm
+  you're not a bot" без cookies.
+- WARP-пул: несколько контейнеров WARP с разными exit-IP, round-robin + кулдаун
+  "битого" IP. WARP — основной источник (warp_primary=True).
+- Резидентный SOCKS5 прокси и cookies уходят в конец цепочки как fallback.
+
+Цепочка попыток (warp_primary): warp → warp(другой IP) → proxy → proxy+cookies → proxy+ios/android.
 """
 import asyncio
 import logging
 import os
 import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -18,8 +25,8 @@ logger = logging.getLogger(__name__)
 # лимит файла (Local Bot API — 2 ГБ)
 MAX_FILE_SIZE = settings.max_file_size
 
-# WARP SOCKS5 прокси (контейнер warp в docker-compose)
-WARP_PROXY = "socks5://warp:9091"
+# запасной WARP-эндпоинт, если пул почему-то пуст
+WARP_PROXY = "socks5://warp1:9091"
 
 
 @dataclass
@@ -83,9 +90,54 @@ def classify_error(error_msg: str) -> str:
     return "unknown"
 
 
+class WarpPool:
+    """Round-robin по WARP-эндпоинтам с кулдауном упавших (ip_blocked).
+
+    Каждый WARP-контейнер имеет свой exit-IP; если YouTube заблокировал один IP,
+    выводим его из ротации на cooldown и продолжаем работать через остальные.
+    """
+
+    def __init__(self, proxies: list[str], cooldown_seconds: int):
+        self._proxies = list(proxies)
+        self._cooldown = max(0, cooldown_seconds)
+        self._idx = 0
+        self._blocked_until: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def all(self) -> list[str]:
+        return list(self._proxies)
+
+    def pick(self) -> str | None:
+        """Следующий доступный эндпоинт (round-robin). Если все на кулдауне —
+        берём тот, у кого кулдаун закончится раньше всех.
+        """
+        with self._lock:
+            if not self._proxies:
+                return None
+            now = time.time()
+            n = len(self._proxies)
+            for _ in range(n):
+                url = self._proxies[self._idx % n]
+                self._idx = (self._idx + 1) % n
+                if self._blocked_until.get(url, 0.0) <= now:
+                    return url
+            # все на кулдауне — наименее "просроченный"
+            return min(self._proxies, key=lambda u: self._blocked_until.get(u, 0.0))
+
+    def mark_blocked(self, url: str | None) -> None:
+        if not url:
+            return
+        with self._lock:
+            if url in self._proxies:
+                self._blocked_until[url] = time.time() + self._cooldown
+
+    def is_member(self, url: str | None) -> bool:
+        return bool(url) and url in self._proxies
+
+
 class YouTubeDownloader:
-    """Скачивает YouTube через yt-dlp + резидентный SOCKS5 прокси (primary) или WARP.
-    Fallback chain: primary → fallback → proxy+cookies → proxy+ios/android.
+    """Скачивает YouTube через yt-dlp: пул WARP (primary) + PO-token,
+    резидентный SOCKS5 прокси и cookies — как fallback.
     """
 
     _COOKIES_PATH = "/app/cookies/cookies.txt"
@@ -93,37 +145,88 @@ class YouTubeDownloader:
     def __init__(self):
         self.download_dir = tempfile.mkdtemp(prefix="yt_bot_")
         self._proxy = settings.proxy_url or None
-        # SOCKS5 резидентный прокси → primary, WARP → fallback
-        self._proxy_first = bool(self._proxy and self._proxy.startswith("socks5://"))
+        self._proxy_is_socks = bool(self._proxy and self._proxy.startswith("socks5://"))
+        # WARP-пул — основной источник; резидентный прокси уходит в конец цепочки
+        self._warp_primary = settings.warp_primary
+        self._warp_pool = WarpPool(settings.warp_proxy_list, settings.warp_cooldown_seconds)
         # callback для уведомления админа когда источник упал
-        # сигнатура: (source: str, error: str) -> None
-        # устанавливается извне (в main.py) после создания экземпляра
-        self.on_source_failed: Callable[[str, str], None] | None = None
+        # сигнатура: (source: str, error: str, endpoint: str | None) -> None; ставится извне (main.py)
+        self.on_source_failed: Callable[..., None] | None = None
 
-        if self._proxy_first:
-            logger.info("Резидентный SOCKS5 прокси (PRIMARY): %s", self._proxy)
-            logger.info("WARP прокси (fallback): %s", WARP_PROXY)
+        pool = self._warp_pool.all()
+        logger.info("WARP-пул (%d эндпоинтов, primary=%s): %s",
+                    len(pool), self._warp_primary, ", ".join(pool) or "—")
+        if self._proxy:
+            role = "fallback" if self._warp_primary else "primary"
+            logger.info("Резидентный прокси (%s): %s", role, self._proxy)
+        if settings.bgutil_base_url:
+            logger.info("PO-token (bgutil): %s", settings.bgutil_base_url)
         else:
-            logger.info("WARP прокси (PRIMARY): %s", WARP_PROXY)
-            if self._proxy:
-                logger.info("Резидентный прокси (fallback): %s", self._proxy)
-
-        if self.has_cookies():
-            logger.info("Cookies: найдены (fallback)")
-        else:
-            logger.info("Cookies: не найдены")
+            logger.info("PO-token: выключен")
+        logger.info("Cookies: %s", "найдены (fallback)" if self.has_cookies() else "не найдены")
 
     def has_cookies(self) -> bool:
         return os.path.isfile(self._COOKIES_PATH)
 
-    def _fire_source_failed(self, source: str, error: Exception) -> None:
-        """Триггер callback'а о падении источника. Не пробрасывает ошибки."""
+    async def check_pot_provider(self) -> None:
+        """Best-effort проверка доступности PO-token провайдера (bgutil) при старте.
+        Ничего не ломает — только логирует: PO-token опционален, при недоступности
+        провайдера yt-dlp качает без токена (с риском бот-детекта). Нужна потому,
+        что quiet=True глушит родное предупреждение yt-dlp о недоступном POT.
+        """
+        base = (settings.bgutil_base_url or "").strip()
+        if not base:
+            return
+        url = base.rstrip("/") + "/ping"
+
+        def _ping() -> int:
+            import urllib.request
+            import urllib.error
+            try:
+                with urllib.request.urlopen(url, timeout=3) as r:
+                    return getattr(r, "status", 200) or 200
+            except urllib.error.HTTPError as he:
+                return he.code  # сервер ответил (пусть даже 404) — значит доступен
+
+        loop = asyncio.get_event_loop()
+        for attempt in range(3):
+            try:
+                status = await loop.run_in_executor(None, _ping)
+                logger.info("PO-token провайдер доступен (%s, HTTP %s)", url, status)
+                return
+            except Exception as e:
+                if attempt < 2:
+                    await asyncio.sleep(2)
+                    continue
+                logger.warning(
+                    "PO-token провайдер НЕдоступен (%s): %s — качаем без токена", url, e,
+                )
+
+    def _fire_source_failed(self, source: str, error: Exception, endpoint: str | None = None) -> None:
+        """Триггер callback'а о падении источника. Не пробрасывает ошибки.
+        endpoint — конкретный WARP-эндпоинт (для точечного рестарта его контейнера).
+        """
         if self.on_source_failed is None:
             return
         try:
-            self.on_source_failed(source, str(error))
+            self.on_source_failed(source, str(error), endpoint)
         except Exception as e:
             logger.warning("on_source_failed callback упал: %s", e)
+
+    def _note_attempt_failure(self, name: str, opts: dict, error: Exception) -> None:
+        """Обрабатывает падение одной попытки: алерт админу + кулдаун WARP-эндпоинта.
+        - если попытка шла через WARP-эндпоинт из пула — передаём его в алерт (для рестарта);
+        - при ip_blocked через WARP выводим этот эндпоинт из ротации на cooldown.
+        """
+        endpoint = opts.get("proxy") if isinstance(opts, dict) else None
+        is_warp = self._warp_pool.is_member(endpoint)
+        self._fire_source_failed(name, error, endpoint if is_warp else None)
+        if is_warp and classify_error(str(error)) == "ip_blocked":
+            logger.warning(
+                "WARP-эндпоинт %s заблокирован YouTube → кулдаун %dс",
+                endpoint, settings.warp_cooldown_seconds,
+            )
+            self._warp_pool.mark_blocked(endpoint)
 
     def _cleanup_old_files(self, max_age_minutes: int = 30) -> None:
         now = time.time()
@@ -137,134 +240,196 @@ class YouTubeDownloader:
         except OSError as e:
             logger.warning("Ошибка при очистке: %s", e)
 
+    # ---------- PO-token ----------
+
+    def _pot_args(self) -> dict:
+        """extractor_args для PO-token провайдера (bgutil). Пусто, если выключен."""
+        base = (settings.bgutil_base_url or "").strip()
+        if not base:
+            return {}
+        return {"youtubepot-bgutilhttp": {"base_url": [base]}}
+
+    def _with_pot(self, opts: dict, youtube_args: dict | None = None) -> dict:
+        """Добавляет PO-token (и опционально youtube-параметры вроде player_client)
+        в extractor_args, не затирая уже существующие ключи.
+        """
+        ea = dict(opts.get("extractor_args") or {})
+        ea.update(self._pot_args())
+        if youtube_args:
+            ea["youtube"] = {**ea.get("youtube", {}), **youtube_args}
+        if ea:
+            opts["extractor_args"] = ea
+        return opts
+
+    # ---------- наборы опций yt-dlp ----------
+
     def _warp_opts(self) -> dict:
-        """Настройки через WARP — все качества без cookies"""
-        return {
+        """WARP из пула (следующий доступный exit-IP) + PO-token."""
+        proxy = self._warp_pool.pick() or WARP_PROXY
+        return self._with_pot({
             "quiet": True,
             "no_warnings": True,
-            "proxy": WARP_PROXY,
+            "proxy": proxy,
             # увеличенные таймауты для WARP (SSL может тормозить)
             "socket_timeout": 30,
             "retries": 3,
-        }
+        })
 
     def _proxy_opts(self) -> dict:
-        """Резидентный SOCKS5 прокси без cookies (primary режим)"""
-        return {
+        """Резидентный SOCKS5 прокси без cookies + PO-token."""
+        return self._with_pot({
             "quiet": True,
             "no_warnings": True,
             "proxy": self._proxy,
             "socket_timeout": 30,
             "retries": 3,
-        }
-
-    def _cookies_opts(self) -> dict:
-        """Fallback: cookies + WARP"""
-        return {
-            **self._warp_opts(),
-            "cookiefile": self._COOKIES_PATH,
-        }
-
-    def _fallback_opts(self) -> dict:
-        """Последний шанс: ios/android через WARP"""
-        return {
-            **self._warp_opts(),
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["ios", "android"],
-                },
-            },
-        }
+        })
 
     def _proxy_cookies_opts(self) -> dict:
-        """Резидентный прокси + cookies (если WARP упал)"""
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-        }
+        """Резидентный прокси + cookies + PO-token."""
+        opts = {"quiet": True, "no_warnings": True}
         if self._proxy:
             opts["proxy"] = self._proxy
         opts["cookiefile"] = self._COOKIES_PATH
-        return opts
+        return self._with_pot(opts)
 
     def _proxy_fallback_opts(self) -> dict:
-        """Резидентный прокси + ios/android (если всё упало)"""
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-        }
+        """Резидентный прокси + ios/android клиенты + PO-token (последний шанс)."""
+        opts = {"quiet": True, "no_warnings": True}
         if self._proxy:
             opts["proxy"] = self._proxy
-        opts["extractor_args"] = {
-            "youtube": {
-                "player_client": ["ios", "android"],
-            },
-        }
+        return self._with_pot(opts, youtube_args={"player_client": ["ios", "android"]})
+
+    def _warp_cookies_opts(self) -> dict:
+        """WARP из пула + cookies + PO-token (cookies-fallback без резидентного прокси)."""
+        opts = self._warp_opts()
+        opts["cookiefile"] = self._COOKIES_PATH
         return opts
 
-    async def get_info(self, url: str) -> VideoInfo:
-        """Получает метаданные видео.
-        primary → fallback. Порядок зависит от _proxy_first.
-        """
-        import yt_dlp
+    def _warp_fallback_opts(self) -> dict:
+        """WARP из пула + ios/android клиенты + PO-token (последний шанс без прокси)."""
+        return self._with_pot(self._warp_opts(), youtube_args={"player_client": ["ios", "android"]})
 
+    # ---------- построение цепочки попыток ----------
+
+    def _attempts(self, prefer_warp: bool) -> list[tuple[str, Callable[[], dict]]]:
+        """Упорядоченная цепочка попыток (name, thunk-опций).
+
+        thunk вызывается в момент попытки → WARP выбирает свежий IP с учётом
+        кулдаунов, выставленных предыдущими попытками.
+        """
+        # резидентный прокси primary только при явном warp_primary=False и SOCKS5-прокси
+        proxy_primary = (not self._warp_primary) and self._proxy_is_socks and not prefer_warp
+
+        pool_n = len(self._warp_pool.all())
+        warp_tries = min(settings.warp_max_tries, pool_n) if pool_n else 1
+        warp_steps: list[tuple[str, Callable[[], dict]]] = [
+            ("warp", self._warp_opts) for _ in range(warp_tries)
+        ]
+        proxy_step: list[tuple[str, Callable[[], dict]]] = (
+            [("proxy", self._proxy_opts)] if self._proxy else []
+        )
+
+        attempts: list[tuple[str, Callable[[], dict]]] = []
+        if proxy_primary:
+            attempts += proxy_step + warp_steps
+        else:
+            attempts += warp_steps + proxy_step
+
+        # хвост: cookies-fallback (через прокси, иначе через WARP), затем ios/android
+        if self.has_cookies():
+            if self._proxy:
+                attempts.append(("proxy+cookies", self._proxy_cookies_opts))
+            else:
+                attempts.append(("warp+cookies", self._warp_cookies_opts))
+        if self._proxy:
+            attempts.append(("proxy+ios", self._proxy_fallback_opts))
+        else:
+            attempts.append(("warp+ios", self._warp_fallback_opts))
+        return attempts
+
+    async def _run_download_attempts(
+        self, op: str, t_start: float, quality_label: str, routing: str,
+        attempts: list[tuple[str, Callable[[], dict]]],
+        run_fn: Callable[[dict], "asyncio.Future"],
+    ) -> DownloadResult:
+        """Перебирает попытки до первого успеха.
+        - FileTooLargeError не триггерит fallback (пробрасывается сразу).
+        - unavailable (приват/гео-блок) — early-exit без fallback и алертов.
+        - на ip_blocked через WARP-эндпоинт ставит его в кулдаун.
+        """
+        last_err: Exception | None = None
+        for name, thunk in attempts:
+            opts = thunk()
+            try:
+                result = await run_fn(opts)
+                checked = self._check_size(result)
+                self._log_download_metric(op, t_start, name, quality_label, checked.file_path, routing)
+                return checked
+            except FileTooLargeError:
+                raise
+            except Exception as e:
+                last_err = e
+                if classify_error(str(e)) == "unavailable":
+                    raise
+                logger.warning("%s не сработал (%s): %s", name, op, e)
+                self._note_attempt_failure(name, opts, e)
+        if last_err:
+            raise last_err
+        raise RuntimeError("download_failed")
+
+    # ---------- публичные методы ----------
+
+    async def get_info(self, url: str) -> VideoInfo:
+        """Получает метаданные видео (лёгкий запрос — только форматы).
+        Если задан резидентный SOCKS5-прокси, идём через него первым: на датацентровых
+        IP WARP YouTube отдаёт УРЕЗАННЫЙ список качеств, из-за чего юзер видел разный
+        набор кнопок. Без прокси — через WARP-пул (PO-token частично компенсирует).
+        Таймауты здесь короче, чем при скачивании: метаданные лёгкие, а долгий get_info
+        задерживает показ кнопок качества.
+        """
         t_start = time.monotonic()
 
-        # get_info всегда через резидентный SOCKS5 → полный список форматов.
-        # На датацентровые IP WARP YouTube отдаёт урезанный список качеств,
-        # из-за чего юзер видел разный набор кнопок при повторных запросах.
-        # Балансировка остаётся только для скачиваний (download_video/audio),
-        # где трафик тяжёлый и экономия на прокси реально важна.
-        routing = "proxy_first"
+        warp_first = not self._proxy_is_socks
+        routing = "warp_first" if warp_first else "proxy_first"
 
-        if self._proxy_first:
-            primary_source = "proxy"
-            primary_opts = self._proxy_opts()
-            fallback_source = "warp"
-            fallback_opts = self._warp_opts()
-        else:
-            primary_source = "warp"
-            primary_opts = self._warp_opts()
-            fallback_source = "proxy"
-            fallback_opts = self._proxy_opts() if self._proxy else None
-
-        ydl_opts = {
-            **primary_opts,
-            "skip_download": True,
-            "ignore_no_formats_error": True,
-        }
+        pool_n = len(self._warp_pool.all())
+        warp_tries = min(2, pool_n) if pool_n else 1
+        warp_steps: list[tuple[str, Callable[[], dict]]] = [
+            ("warp", self._warp_opts) for _ in range(warp_tries)
+        ]
+        proxy_step: list[tuple[str, Callable[[], dict]]] = (
+            [("proxy", self._proxy_opts)] if self._proxy else []
+        )
+        attempts = warp_steps + proxy_step if warp_first else proxy_step + warp_steps
 
         loop = asyncio.get_event_loop()
-        source = primary_source
-        try:
-            info = await loop.run_in_executor(
-                None, self._extract_info, url, ydl_opts
-            )
-        except Exception as e:
-            # ошибка на стороне контента — fallback'и не помогут
-            if classify_error(str(e)) == "unavailable":
-                raise
-            # инфраструктурный сбой primary — алертим админа
-            self._fire_source_failed(primary_source, e)
-            if fallback_opts:
-                logger.warning("%s не дал инфо, пробую %s: %s", primary_source, fallback_source, e)
-                source = fallback_source
-                fb = {
-                    **fallback_opts,
-                    "skip_download": True,
-                    "ignore_no_formats_error": True,
-                }
-                try:
-                    info = await loop.run_in_executor(
-                        None, self._extract_info, url, fb
-                    )
-                except Exception as e2:
-                    # fallback тоже упал — алертим и его
-                    if classify_error(str(e2)) != "unavailable":
-                        self._fire_source_failed(fallback_source, e2)
+        info = None
+        source = ""
+        last_err: Exception | None = None
+        for name, thunk in attempts:
+            opts = {
+                **thunk(),
+                "skip_download": True,
+                "ignore_no_formats_error": True,
+                # метаданные лёгкие — не ждём по 90с на медленном эндпоинте
+                "socket_timeout": 15,
+                "retries": 1,
+            }
+            try:
+                info = await loop.run_in_executor(None, self._extract_info, url, opts)
+                source = name
+                break
+            except Exception as e:
+                last_err = e
+                # ошибка на стороне контента — fallback'и не помогут
+                if classify_error(str(e)) == "unavailable":
                     raise
-            else:
-                raise
+                logger.warning("%s не дал инфо: %s", name, e)
+                self._note_attempt_failure(name, opts, e)
+
+        if info is None:
+            raise last_err if last_err else RuntimeError("get_info_failed")
 
         elapsed = time.monotonic() - t_start
         logger.info(
@@ -333,95 +498,43 @@ class YouTubeDownloader:
         prefer_warp: bool = False,
     ) -> DownloadResult:
         """Скачивает видео.
-        Порядок попыток:
-          - prefer_warp=False (дефолт, большие видео): proxy → warp → proxy+cookies → proxy+ios
-          - prefer_warp=True (маленькие видео): warp → proxy → proxy+cookies → proxy+ios
+        По умолчанию (warp_primary=True) цепочка:
+          warp → warp(другой IP) → proxy → proxy+cookies → proxy+ios.
+        prefer_warp сохранён для обратной совместимости (влияет только при warp_primary=False).
         """
         self._cleanup_old_files()
         t_start = time.monotonic()
 
-        # определяем primary и alt fallback в зависимости от prefer_warp
-        use_proxy_primary = self._proxy_first and not prefer_warp
-        routing = "hd" if use_proxy_primary else "small"
+        attempts = self._attempts(prefer_warp)
+        proxy_primary = (not self._warp_primary) and self._proxy_is_socks and not prefer_warp
+        routing = "proxy_first" if proxy_primary else "warp_first"
 
-        # 1. PRIMARY
-        if use_proxy_primary:
-            primary_opts = self._proxy_opts()
-            primary_name = "proxy"
-            alt_opts = self._warp_opts()
-            alt_name = "warp"
-        else:
-            primary_opts = self._warp_opts()
-            primary_name = "warp"
-            alt_opts = self._proxy_opts() if self._proxy else None
-            alt_name = "proxy"
+        async def run_fn(opts: dict) -> DownloadResult:
+            return await self._download_with_quality(url, quality, progress_callback, opts=opts)
 
-        try:
-            result = await self._download_with_quality(
-                url, quality, progress_callback, opts=primary_opts
-            )
-            checked = self._check_size(result)
-            self._log_download_metric("download_video", t_start, primary_name, quality, checked.file_path, routing)
-            return checked
-        except FileTooLargeError:
-            # размер не починится сменой источника — пробрасываем сразу
-            raise
-        except Exception as e:
-            logger.warning("%s не сработал: %s", primary_name, e)
-            self._fire_source_failed(primary_name, e)
-            # ошибка на стороне контента (приват/гео-блок) — fallback'и не помогут
-            if classify_error(str(e)) == "unavailable":
-                raise
+        return await self._run_download_attempts(
+            "download_video", t_start, quality, routing, attempts, run_fn,
+        )
 
-        # 2. FALLBACK на альтернативный источник (warp ↔ proxy)
-        if alt_opts:
-            try:
-                logger.info("Fallback: %s", alt_name)
-                result = await self._download_with_quality(
-                    url, quality, progress_callback, opts=alt_opts
-                )
-                checked = self._check_size(result)
-                self._log_download_metric("download_video", t_start, alt_name, quality, checked.file_path, routing)
-                return checked
-            except FileTooLargeError:
-                raise
-            except Exception as e:
-                logger.warning("%s не сработал: %s", alt_name, e)
-                self._fire_source_failed(alt_name, e)
+    async def download_audio(
+        self, url: str,
+        progress_callback: ProgressCallback = None,
+        prefer_warp: bool = True,
+    ) -> DownloadResult:
+        """Скачивает аудио. prefer_warp=True — аудио маленькое, идёт через WARP-пул."""
+        self._cleanup_old_files()
+        t_start = time.monotonic()
 
-        # 3. резидентный прокси + cookies
-        if self.has_cookies() and self._proxy:
-            try:
-                logger.info("Fallback: резидентный прокси + cookies")
-                result = await self._download_with_quality(
-                    url, quality, progress_callback, opts=self._proxy_cookies_opts()
-                )
-                checked = self._check_size(result)
-                self._log_download_metric("download_video", t_start, "proxy+cookies", quality, checked.file_path, routing)
-                return checked
-            except FileTooLargeError:
-                raise
-            except Exception as e:
-                logger.warning("Прокси+cookies не сработали: %s", e)
-                self._fire_source_failed("proxy+cookies", e)
+        attempts = self._attempts(prefer_warp)
+        proxy_primary = (not self._warp_primary) and self._proxy_is_socks and not prefer_warp
+        routing = "proxy_first" if proxy_primary else "warp_first"
 
-        # 4. резидентный прокси + ios/android (последний шанс)
-        if self._proxy:
-            try:
-                logger.info("Fallback: резидентный прокси + ios/android")
-                result = await self._download_with_quality(
-                    url, quality, progress_callback, opts=self._proxy_fallback_opts()
-                )
-                checked = self._check_size(result)
-                self._log_download_metric("download_video", t_start, "proxy+ios", quality, checked.file_path, routing)
-                return checked
-            except FileTooLargeError:
-                raise
-            except Exception as e:
-                logger.warning("Прокси+ios не сработали: %s", e)
-                self._fire_source_failed("proxy+ios", e)
+        async def run_fn(opts: dict) -> DownloadResult:
+            return await self._do_download_audio(url, progress_callback, opts=opts)
 
-        raise RuntimeError("download_failed")
+        return await self._run_download_attempts(
+            "download_audio", t_start, "m4a", routing, attempts, run_fn,
+        )
 
     def _log_download_metric(
         self, op: str, t_start: float, source: str, quality: str, file_path: str, routing: str = "default",
@@ -437,95 +550,14 @@ class YouTubeDownloader:
             op, elapsed, source, routing, quality, size_mb, speed,
         )
 
-    async def download_audio(
-        self, url: str,
-        progress_callback: ProgressCallback = None,
-        prefer_warp: bool = True,
-    ) -> DownloadResult:
-        """Скачивает аудио. По умолчанию prefer_warp=True — аудио маленькое,
-        разгружаем прокси от мелких файлов."""
-        self._cleanup_old_files()
-        t_start = time.monotonic()
-
-        use_proxy_primary = self._proxy_first and not prefer_warp
-        routing = "hd" if use_proxy_primary else "small"
-
-        # 1. PRIMARY
-        if use_proxy_primary:
-            primary_opts = self._proxy_opts()
-            primary_name = "proxy"
-            alt_opts = self._warp_opts()
-            alt_name = "warp"
-        else:
-            primary_opts = self._warp_opts()
-            primary_name = "warp"
-            alt_opts = self._proxy_opts() if self._proxy else None
-            alt_name = "proxy"
-
-        try:
-            result = await self._do_download_audio(url, progress_callback, opts=primary_opts)
-            self._log_download_metric("download_audio", t_start, primary_name, "m4a", result.file_path, routing)
-            return result
-        except FileTooLargeError:
-            # размер не починится сменой источника — пробрасываем сразу, без алерта
-            raise
-        except Exception as e:
-            logger.warning("%s не сработал (аудио): %s", primary_name, e)
-            self._fire_source_failed(primary_name, e)
-            # ошибка на стороне контента (приват/гео-блок) — fallback'и не помогут
-            if classify_error(str(e)) == "unavailable":
-                raise
-
-        # 2. FALLBACK на альтернативный источник
-        if alt_opts:
-            try:
-                logger.info("Fallback: %s (аудио)", alt_name)
-                result = await self._do_download_audio(url, progress_callback, opts=alt_opts)
-                self._log_download_metric("download_audio", t_start, alt_name, "m4a", result.file_path, routing)
-                return result
-            except FileTooLargeError:
-                raise
-            except Exception as e:
-                logger.warning("%s не сработал (аудио): %s", alt_name, e)
-                self._fire_source_failed(alt_name, e)
-
-        # 3. резидентный прокси + cookies
-        if self.has_cookies() and self._proxy:
-            try:
-                logger.info("Fallback: прокси + cookies (аудио)")
-                result = await self._do_download_audio(url, progress_callback, opts=self._proxy_cookies_opts())
-                self._log_download_metric("download_audio", t_start, "proxy+cookies", "m4a", result.file_path, routing)
-                return result
-            except FileTooLargeError:
-                raise
-            except Exception as e:
-                logger.warning("Прокси+cookies не сработали (аудио): %s", e)
-                self._fire_source_failed("proxy+cookies", e)
-
-        # 4. резидентный прокси + ios/android
-        if self._proxy:
-            try:
-                logger.info("Fallback: прокси + ios/android (аудио)")
-                result = await self._do_download_audio(url, progress_callback, opts=self._proxy_fallback_opts())
-                self._log_download_metric("download_audio", t_start, "proxy+ios", "m4a", result.file_path, routing)
-                return result
-            except FileTooLargeError:
-                raise
-            except Exception as e:
-                logger.warning("Прокси+ios не сработали (аудио): %s", e)
-                self._fire_source_failed("proxy+ios", e)
-
-        raise RuntimeError("download_failed")
-
     async def _do_download_audio(
         self, url: str, progress_callback: ProgressCallback, opts: dict,
     ) -> DownloadResult:
         """Скачивает аудио в нативном формате (m4a) без перекодирования.
         m4a — нативный формат YouTube (AAC), Telegram играет его как аудио.
         Без FFmpeg postprocessor — экономит до 4 минут CPU на длинных видео.
+        Размер проверяет вызывающий (_run_download_attempts).
         """
-        import yt_dlp
-
         output_template = os.path.join(self.download_dir, "%(id)s_audio.%(ext)s")
         ydl_opts = {
             **opts,
@@ -545,13 +577,13 @@ class YouTubeDownloader:
         if not file_path or not os.path.exists(file_path):
             raise RuntimeError("Не удалось найти скачанный аудиофайл")
 
-        return self._check_size(DownloadResult(
+        return DownloadResult(
             file_path=file_path,
             media_type="audio",
             title=info.get("title", "YouTube Audio"),
             duration=info.get("duration"),
             format_key="audio",
-        ))
+        )
 
     def _check_size(self, result: DownloadResult) -> DownloadResult:
         file_size = os.path.getsize(result.file_path)
@@ -567,8 +599,6 @@ class YouTubeDownloader:
         progress_callback: ProgressCallback = None,
         opts: dict = None,
     ) -> DownloadResult:
-        import yt_dlp
-
         output_template = os.path.join(self.download_dir, f"%(id)s_{quality}p.%(ext)s")
         height = int(quality)
         format_str = (

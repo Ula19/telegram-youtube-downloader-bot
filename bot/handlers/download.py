@@ -491,20 +491,33 @@ def setup_fallback_alerts(bot) -> None:
     logger.info("Алерты о падении источников подключены")
 
 
-def _on_source_failed(source: str, error: str) -> None:
+def _warp_service_from_endpoint(endpoint: str | None) -> str | None:
+    """socks5://warp3:9091 -> 'warp3' (имя compose-сервиса). None, если не WARP-эндпоинт."""
+    if not endpoint:
+        return None
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(endpoint).hostname or ""
+    except Exception:
+        return None
+    return host if host.startswith("warp") else None
+
+
+def _on_source_failed(source: str, error: str, endpoint: str | None = None) -> None:
     """Sync callback, вызывается из download_video/audio когда источник упал.
     Шедулит асинхронную отправку алерта в event loop.
+    endpoint — конкретный WARP-эндпоинт (для точечного рестарта его контейнера).
     """
     if _bot_ref is None:
         return
     try:
-        asyncio.create_task(_send_fallback_alert(source, error))
+        asyncio.create_task(_send_fallback_alert(source, error, endpoint))
     except RuntimeError:
         # нет активного event loop — игнорируем
         pass
 
 
-async def _send_fallback_alert(source: str, error: str) -> None:
+async def _send_fallback_alert(source: str, error: str, endpoint: str | None = None) -> None:
     """Отправляет алерт админу о падении источника. С троттлингом и классификацией ошибки."""
     now = time.time()
     # ключ троттлинга — (источник, категория), чтобы разные типы ошибок не глушили друг друга
@@ -513,12 +526,16 @@ async def _send_fallback_alert(source: str, error: str) -> None:
     if category in _SILENT_CATEGORIES:
         return
 
-    # WARP заблокирован YouTube — перезапускаем для получения нового IP
-    if source == "warp" and category == "ip_blocked":
-        from bot.utils.docker import restart_warp
-        restarted = await restart_warp()
-        if restarted:
-            logger.info("WARP перезапущен после ip_blocked")
+    # конкретный WARP-эндпоинт заблокирован YouTube — рестартим ИМЕННО его контейнер
+    # (получит новый exit-IP; в ротацию вернётся после кулдауна, уже с чистым IP)
+    restarted = False
+    if category == "ip_blocked" and endpoint:
+        service = _warp_service_from_endpoint(endpoint)
+        if service:
+            from bot.utils.docker import restart_warp
+            restarted = await restart_warp(service)
+            if restarted:
+                logger.info("WARP %s перезапущен после ip_blocked (%s)", service, endpoint)
 
     throttle_key = f"{source}:{category}"
     last = _last_fallback_alert.get(throttle_key, 0)
@@ -531,8 +548,8 @@ async def _send_fallback_alert(source: str, error: str) -> None:
     category_label = _ERROR_CATEGORY_LABELS.get(category, category)
 
     warp_note = ""
-    if source == "warp" and category == "ip_blocked":
-        warp_note = "\n\n♻️ <i>WARP контейнер перезапущен для смены IP</i>"
+    if restarted:
+        warp_note = "\n\n♻️ <i>WARP-контейнер перезапущен для смены IP</i>"
 
     text = (
         f"{E['warning']} <b>Источник упал!</b>\n\n"

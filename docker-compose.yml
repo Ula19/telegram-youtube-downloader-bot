@@ -1,3 +1,14 @@
+# Базовый конфиг одного WARP-контейнера (пул warp1..warpN — каждый со своим exit-IP)
+x-warp-base: &warp-base
+  image: ghcr.io/mon-ius/docker-warp-socks:v5
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "curl -x socks5://127.0.0.1:9091 -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q warp=on"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 15s
+
 services:
   # Наш бот
   bot:
@@ -12,8 +23,20 @@ services:
         condition: service_healthy
       bot-api:
         condition: service_started
-      warp:
-        condition: service_healthy
+      bgutil:
+        condition: service_started
+      # только service_started (не healthy): бот сам round-robin'ит по живым WARP
+      # в рантайме и уводит битые в кулдаун — жёсткий гейт на один warp был бы SPOF
+      warp1:
+        condition: service_started
+      warp2:
+        condition: service_started
+      warp3:
+        condition: service_started
+      warp4:
+        condition: service_started
+      warp5:
+        condition: service_started
     volumes:
       # tmp для скачанных видео (не занимает место в контейнере)
       - /tmp/yt_bot:/tmp/yt_bot
@@ -39,16 +62,29 @@ services:
       - bot-api-data:/var/lib/telegram-bot-api
       - /tmp/yt_bot:/tmp/yt_bot
 
-  # Cloudflare WARP — бесплатный VPN, YouTube не блокирует IP Cloudflare
-  warp:
-    image: ghcr.io/mon-ius/docker-warp-socks:v5
+  # PO-token провайдер (bgutil) — снимает "Sign in to confirm you're not a bot" без cookies.
+  # Отдельный HTTP-сервер на :4416, плагин yt-dlp в контейнере бота ходит к нему.
+  # Без healthcheck намеренно: PO-token best-effort, при недоступности бот качает без токена.
+  bgutil:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -x socks5://127.0.0.1:9091 -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep -q warp=on"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+    init: true
+
+  # Пул Cloudflare WARP — каждый контейнер регистрируется отдельно → свой exit-IP.
+  # Бот round-robin'ит запросы по warp1..warp5 и уводит "битый" IP в кулдаун.
+  # RAM: ~50-100 МБ на контейнер → пул из 5 ≈ 0.3-0.5 ГБ. Плюс bgutil (~150-300 МБ).
+  # Заложи на хосте ≥2-3 ГБ RAM сверх ОС (5×WARP + bgutil + bot + bot-api + postgres).
+  # Меняешь число warpN — синхронно правь WARP_POOL_SIZE в .env.
+  warp1:
+    <<: *warp-base
+  warp2:
+    <<: *warp-base
+  warp3:
+    <<: *warp-base
+  warp4:
+    <<: *warp-base
+  warp5:
+    <<: *warp-base
 
   # Автоперезапуск unhealthy контейнеров (особенно WARP)
   autoheal:

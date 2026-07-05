@@ -132,6 +132,10 @@ async def main() -> None:
         asyncio.create_task(_background_cleanup())
         logger.info("Фоновая очистка запущена (интервал 5 мин)")
 
+        # best-effort проверка PO-token провайдера (не блокирует старт)
+        from bot.services.youtube import downloader as yt_downloader
+        asyncio.create_task(yt_downloader.check_pot_provider())
+
         bot_info = await bot.get_me()
         logger.info(f"Бот @{bot_info.username} запущен!")
 
