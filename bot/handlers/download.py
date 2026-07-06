@@ -471,7 +471,9 @@ def _get_error_text(error: str, lang: str = "ru") -> str:
         return t("error.timeout", lang)
     elif "available in your country" in error_lower:
         return t("error.geo_blocked", lang)
-    elif "age" in error_lower:
+    elif "age-restricted" in error_lower or "confirm your age" in error_lower \
+            or "inappropriate for some users" in error_lower:
+        # именно ограничение по возрасту, а не слово "page" в "API page"
         return t("error.age_restricted", lang)
     else:
         return t("error.generic", lang)
