@@ -390,7 +390,12 @@ class YouTubeDownloader:
         """
         t_start = time.monotonic()
 
-        warp_first = not self._proxy_is_socks
+        # WARP+PO-token отдаёт ПОЛНЫЙ список качеств (проверено yt-dlp -F: DASH 240..1080).
+        # Поэтому при включённом bgutil идём WARP-пулом первым — именно резидентный
+        # прокси на датацентровом/забаненном IP обрезал список до 360/720.
+        # Без PO-token оставляем старую логику (proxy-first), т.к. голый WARP урезает.
+        pot_on = bool(self._pot_args())
+        warp_first = pot_on or not self._proxy_is_socks
         routing = "warp_first" if warp_first else "proxy_first"
 
         pool_n = len(self._warp_pool.all())
