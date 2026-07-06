@@ -601,10 +601,16 @@ class YouTubeDownloader:
     ) -> DownloadResult:
         output_template = os.path.join(self.download_dir, f"%(id)s_{quality}p.%(ext)s")
         height = int(quality)
+        # YouTube помечает качество по КОРОТКОЙ стороне (720p шортса = 720x1280).
+        # По height фильтровать нельзя: у вертикальных видео height — это длинная
+        # сторона, и height<=720 роняет 720p-шортс до 360p. Ограничиваем ДЛИННУЮ
+        # сторону (обе стороны <= 2*target) — так нужный тир корректно отделяется
+        # и в landscape, и в портрете (тиры YouTube по длинной стороне разнесены >2x).
+        cap = height * 2
         format_str = (
-            f"bestvideo[height<={height}][vcodec~='^(avc|h264)']+bestaudio[ext=m4a]"
-            f"/bestvideo[height<={height}]+bestaudio"
-            f"/best[height<={height}]"
+            f"bestvideo[height<={cap}][width<={cap}][vcodec~='^(avc|h264)']+bestaudio[ext=m4a]"
+            f"/bestvideo[height<={cap}][width<={cap}]+bestaudio"
+            f"/best[height<={cap}][width<={cap}]"
             f"/best"
         )
 
