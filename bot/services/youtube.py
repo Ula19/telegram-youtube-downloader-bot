@@ -57,29 +57,87 @@ class FileTooLargeError(Exception):
 
 def classify_error(error_msg: str) -> str:
     """Классифицирует ошибку yt-dlp в категорию для осмысленных алертов.
-    Возвращает: 'cookies_expired', 'ip_blocked', 'network', 'unavailable', 'unknown'.
+    Возвращает: 'geo_blocked', 'unavailable', 'age_restricted', 'ip_blocked',
+    'expired_url', 'cookies_expired', 'network', 'unknown'.
+    Порядок проверок важен — сначала контентные ошибки, потом инфраструктурные.
     """
     msg = error_msg.lower()
-    # IP заблокирован / YouTube задетектил бота
+
+    # 1. блокировка по стране или правообладателем (Content ID: UMG, WMG и т.п.)
+    # проверяем ПЕРЕД unavailable — иначе "not available in your country" улетит не туда.
+    # цепочку fallback не рвём: другой IP в другой стране может скачать
+    if (
+        "available in your country" in msg
+        or "in your country" in msg
+        or "contains claimed content" in msg
+        or "have blocked it" in msg
+        or "has blocked it" in msg
+        or "on copyright grounds" in msg
+        or "country_blocked" in msg
+    ):
+        return "geo_blocked"
+
+    # 2. видео недоступно навсегда — ни один источник не поможет, выходим сразу
+    if (
+        "video unavailable" in msg
+        or "private video" in msg
+        or "video is private" in msg
+        or "has been removed" in msg
+        or "removed by the uploader" in msg
+        or "has been terminated" in msg
+        or "members-only" in msg
+        or "join this channel" in msg
+        or "http error 404" in msg
+    ):
+        return "unavailable"
+
+    # 3. возрастное ограничение — лечится только cookies залогиненного аккаунта.
+    # проверяем ПЕРЕД ip_blocked: "sign in to confirm your age" не бот-детект
+    if (
+        "confirm your age" in msg
+        or "age-restricted" in msg
+        or "age restricted" in msg
+        or "inappropriate for some users" in msg
+    ):
+        return "age_restricted"
+
+    # 4. YouTube задетектил бота — IP реально забанен, лечится сменой IP.
     # "sign in to confirm you're not a bot" — это именно бот-детект, а не протухшие куки
     # (на WARP/прокси мы вообще без куки ходим, так что "cookies_expired" там невозможен)
     if (
-        "403" in msg
-        or "forbidden" in msg
-        or "not a bot" in msg
+        "not a bot" in msg
         or "sign in to confirm" in msg
         or "detected as a bot" in msg
+        or "http error 429" in msg
+        or "too many requests" in msg
     ):
         return "ip_blocked"
-    # cookies протухли (только когда реально использовались куки)
+
+    # 5. 403 на скачивании сегментов — протухшая подписанная ссылка googlevideo:
+    # истёк срок, не решён n-challenge (deno) или нет PO token.
+    # Это НЕ бан IP — рестартить WARP бессмысленно (порвём чужие закачки)
+    if "403" in msg or "forbidden" in msg:
+        return "expired_url"
+
+    # 6. cookies протухли (только когда реально использовались куки)
     if "login required" in msg or "cookies" in msg:
         return "cookies_expired"
-    # сетевые проблемы
-    if "timeout" in msg or "connection" in msg or "unreachable" in msg or "socks" in msg:
+
+    # 7. сеть и транзиентные сбои прокси/CDN (5xx — нода прокси или googlevideo моргнули)
+    if (
+        "timeout" in msg
+        or "timed out" in msg
+        or "connection" in msg
+        or "unreachable" in msg
+        or "socks" in msg
+        or "giving up after" in msg
+        or "internal server error" in msg
+        or "bad gateway" in msg
+        or "service unavailable" in msg
+        or "http error 5" in msg
+    ):
         return "network"
-    # видео недоступно (гео-блок, приват и т.п.)
-    if "unavailable" in msg or "private" in msg or "not available" in msg:
-        return "unavailable"
+
     return "unknown"
 
 
@@ -95,10 +153,13 @@ class YouTubeDownloader:
         self._proxy = settings.proxy_url or None
         # SOCKS5 резидентный прокси → primary, WARP → fallback
         self._proxy_first = bool(self._proxy and self._proxy.startswith("socks5://"))
-        # callback для уведомления админа когда источник упал
-        # сигнатура: (source: str, error: str) -> None
-        # устанавливается извне (в main.py) после создания экземпляра
+        # callback на падение одного источника — только реакция на инфраструктуру
+        # (например рестарт WARP), без сообщений админу. Сигнатура: (source, error) -> None
         self.on_source_failed: Callable[[str, str], None] | None = None
+        # callback когда провалилась ВСЯ цепочка fallback — вот тут уже алертим админа.
+        # Сигнатура: (failures: list[tuple[source, error]]) -> None
+        # оба устанавливаются извне (в main.py) после создания экземпляра
+        self.on_all_failed: Callable[[list[tuple[str, str]]], None] | None = None
 
         if self._proxy_first:
             logger.info("Резидентный SOCKS5 прокси (PRIMARY): %s", self._proxy)
@@ -124,6 +185,15 @@ class YouTubeDownloader:
             self.on_source_failed(source, str(error))
         except Exception as e:
             logger.warning("on_source_failed callback упал: %s", e)
+
+    def _fire_all_failed(self, failures: list[tuple[str, str]]) -> None:
+        """Триггер callback'а о полном провале цепочки. Не пробрасывает ошибки."""
+        if self.on_all_failed is None or not failures:
+            return
+        try:
+            self.on_all_failed(failures)
+        except Exception as e:
+            logger.warning("on_all_failed callback упал: %s", e)
 
     def _cleanup_old_files(self, max_age_minutes: int = 30) -> None:
         now = time.time()
@@ -236,6 +306,7 @@ class YouTubeDownloader:
 
         loop = asyncio.get_event_loop()
         source = primary_source
+        failures: list[tuple[str, str]] = []
         try:
             info = await loop.run_in_executor(
                 None, self._extract_info, url, ydl_opts
@@ -244,7 +315,9 @@ class YouTubeDownloader:
             # ошибка на стороне контента — fallback'и не помогут
             if classify_error(str(e)) == "unavailable":
                 raise
-            # инфраструктурный сбой primary — алертим админа
+            # инфраструктурный сбой primary — реагируем (рестарт WARP), но админа не дёргаем:
+            # fallback ещё может вытянуть, алерт уйдёт только если ляжет вся цепочка
+            failures.append((primary_source, str(e)))
             self._fire_source_failed(primary_source, e)
             if fallback_opts:
                 logger.warning("%s не дал инфо, пробую %s: %s", primary_source, fallback_source, e)
@@ -259,11 +332,14 @@ class YouTubeDownloader:
                         None, self._extract_info, url, fb
                     )
                 except Exception as e2:
-                    # fallback тоже упал — алертим и его
                     if classify_error(str(e2)) != "unavailable":
+                        failures.append((fallback_source, str(e2)))
                         self._fire_source_failed(fallback_source, e2)
+                    # инфо получить не удалось ничем — вот теперь алертим одним сообщением
+                    self._fire_all_failed(failures)
                     raise
             else:
+                self._fire_all_failed(failures)
                 raise
 
         elapsed = time.monotonic() - t_start
@@ -356,6 +432,9 @@ class YouTubeDownloader:
             alt_opts = self._proxy_opts() if self._proxy else None
             alt_name = "proxy"
 
+        # копим падения по всей цепочке — админу уйдёт один алерт, если ничего не сработало
+        failures: list[tuple[str, str]] = []
+
         try:
             result = await self._download_with_quality(
                 url, quality, progress_callback, opts=primary_opts
@@ -368,8 +447,9 @@ class YouTubeDownloader:
             raise
         except Exception as e:
             logger.warning("%s не сработал: %s", primary_name, e)
+            failures.append((primary_name, str(e)))
             self._fire_source_failed(primary_name, e)
-            # ошибка на стороне контента (приват/гео-блок) — fallback'и не помогут
+            # ошибка на стороне контента (приват/удалено) — fallback'и не помогут
             if classify_error(str(e)) == "unavailable":
                 raise
 
@@ -387,6 +467,7 @@ class YouTubeDownloader:
                 raise
             except Exception as e:
                 logger.warning("%s не сработал: %s", alt_name, e)
+                failures.append((alt_name, str(e)))
                 self._fire_source_failed(alt_name, e)
 
         # 3. резидентный прокси + cookies
@@ -403,6 +484,7 @@ class YouTubeDownloader:
                 raise
             except Exception as e:
                 logger.warning("Прокси+cookies не сработали: %s", e)
+                failures.append(("proxy+cookies", str(e)))
                 self._fire_source_failed("proxy+cookies", e)
 
         # 4. резидентный прокси + ios/android (последний шанс)
@@ -419,8 +501,11 @@ class YouTubeDownloader:
                 raise
             except Exception as e:
                 logger.warning("Прокси+ios не сработали: %s", e)
+                failures.append(("proxy+ios", str(e)))
                 self._fire_source_failed("proxy+ios", e)
 
+        # вся цепочка легла — вот теперь один алерт админу со сводкой
+        self._fire_all_failed(failures)
         raise RuntimeError("download_failed")
 
     def _log_download_metric(
@@ -462,6 +547,9 @@ class YouTubeDownloader:
             alt_opts = self._proxy_opts() if self._proxy else None
             alt_name = "proxy"
 
+        # копим падения по всей цепочке — админу уйдёт один алерт, если ничего не сработало
+        failures: list[tuple[str, str]] = []
+
         try:
             result = await self._do_download_audio(url, progress_callback, opts=primary_opts)
             self._log_download_metric("download_audio", t_start, primary_name, "m4a", result.file_path, routing)
@@ -471,8 +559,9 @@ class YouTubeDownloader:
             raise
         except Exception as e:
             logger.warning("%s не сработал (аудио): %s", primary_name, e)
+            failures.append((primary_name, str(e)))
             self._fire_source_failed(primary_name, e)
-            # ошибка на стороне контента (приват/гео-блок) — fallback'и не помогут
+            # ошибка на стороне контента (приват/удалено) — fallback'и не помогут
             if classify_error(str(e)) == "unavailable":
                 raise
 
@@ -487,6 +576,7 @@ class YouTubeDownloader:
                 raise
             except Exception as e:
                 logger.warning("%s не сработал (аудио): %s", alt_name, e)
+                failures.append((alt_name, str(e)))
                 self._fire_source_failed(alt_name, e)
 
         # 3. резидентный прокси + cookies
@@ -500,6 +590,7 @@ class YouTubeDownloader:
                 raise
             except Exception as e:
                 logger.warning("Прокси+cookies не сработали (аудио): %s", e)
+                failures.append(("proxy+cookies", str(e)))
                 self._fire_source_failed("proxy+cookies", e)
 
         # 4. резидентный прокси + ios/android
@@ -513,8 +604,11 @@ class YouTubeDownloader:
                 raise
             except Exception as e:
                 logger.warning("Прокси+ios не сработали (аудио): %s", e)
+                failures.append(("proxy+ios", str(e)))
                 self._fire_source_failed("proxy+ios", e)
 
+        # вся цепочка легла — вот теперь один алерт админу со сводкой
+        self._fire_all_failed(failures)
         raise RuntimeError("download_failed")
 
     async def _do_download_audio(

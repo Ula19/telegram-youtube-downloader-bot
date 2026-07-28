@@ -2,6 +2,7 @@
 Флоу: ссылка → выбор формата → выбор качества → скачивание → отправка
 """
 import asyncio
+import html
 import logging
 import os
 import time
@@ -44,12 +45,28 @@ _last_fallback_alert: dict[str, float] = {}
 _ERROR_CATEGORY_LABELS = {
     "cookies_expired": "Cookies протухли — обнови через /update_cookies",
     "ip_blocked": "YouTube заблокировал IP — нужна ротация прокси",
-    "network": "Сетевая ошибка (таймаут/нет связи)",
+    "expired_url": "Протухшая ссылка на видео (403) — n-challenge или PO token",
+    "age_restricted": "Возрастное ограничение — нужны cookies залогиненного аккаунта",
+    "network": "Сетевая ошибка (таймаут или 5xx у прокси/CDN)",
+    "geo_blocked": "Видео заблокировано по стране или правообладателем",
+    "unavailable": "Видео недоступно (приват/удалено)",
     "unknown": "Неизвестная ошибка",
 }
 
-# категории которые не алертим админу — это ошибки на стороне юзера/контента, не инфраструктуры
-_SILENT_CATEGORIES = {"unavailable"}
+# категории которые не алертим админу — это ошибки на стороне контента, не инфраструктуры
+_SILENT_CATEGORIES = {"unavailable", "geo_blocked"}
+
+# что важнее показать админу, когда упало несколько источников с разными ошибками
+_CATEGORY_PRIORITY = [
+    "ip_blocked",
+    "cookies_expired",
+    "network",
+    "expired_url",
+    "unknown",
+    "age_restricted",
+    "geo_blocked",
+    "unavailable",
+]
 
 # максимум 30 одновременных скачиваний — сервер мощный (8ГБ ОЗУ, 6.4ГБ свободно)
 _download_semaphore = asyncio.Semaphore(30)
@@ -482,70 +499,98 @@ _bot_ref = None
 
 
 def setup_fallback_alerts(bot) -> None:
-    """Подключает callback алертов админу к downloader.
+    """Подключает callbacks к downloader: реакция на падение источника + алерты админу.
     Вызывается из main.py после создания бота.
     """
     global _bot_ref
     _bot_ref = bot
     downloader.on_source_failed = _on_source_failed
+    downloader.on_all_failed = _on_all_failed
     logger.info("Алерты о падении источников подключены")
 
 
 def _on_source_failed(source: str, error: str) -> None:
-    """Sync callback, вызывается из download_video/audio когда источник упал.
-    Шедулит асинхронную отправку алерта в event loop.
+    """Падение одного источника. Админу НЕ пишем — дальше по цепочке может сработать fallback.
+    Здесь только лог и техническая реакция на инфраструктуру.
     """
-    if _bot_ref is None:
+    category = classify_error(error)
+    logger.warning("Источник %s упал (%s): %s", source, category, error[:200])
+
+    # WARP забанен YouTube — молча перезапускаем для смены IP (у restart_warp свой кулдаун)
+    if source == "warp" and category == "ip_blocked":
+        try:
+            asyncio.create_task(_restart_warp_silently())
+        except RuntimeError:
+            pass  # нет активного event loop
+
+
+async def _restart_warp_silently() -> None:
+    """Перезапуск WARP без уведомления админа — только запись в лог."""
+    from bot.utils.docker import restart_warp
+    restarted = await restart_warp()
+    if restarted:
+        logger.info("WARP перезапущен после ip_blocked (без алерта)")
+
+
+def _on_all_failed(failures: list[tuple[str, str]]) -> None:
+    """Sync callback: провалилась вся цепочка источников. Шедулит один алерт админу."""
+    if _bot_ref is None or not failures:
         return
     try:
-        asyncio.create_task(_send_fallback_alert(source, error))
+        asyncio.create_task(_send_failure_alert(failures))
     except RuntimeError:
         # нет активного event loop — игнорируем
         pass
 
 
-async def _send_fallback_alert(source: str, error: str) -> None:
-    """Отправляет алерт админу о падении источника. С троттлингом и классификацией ошибки."""
-    now = time.time()
-    # ключ троттлинга — (источник, категория), чтобы разные типы ошибок не глушили друг друга
-    category = classify_error(error)
-    # не алертим для ошибок на стороне юзера/контента (приват, гео-блок и т.п.)
-    if category in _SILENT_CATEGORIES:
+async def _send_failure_alert(failures: list[tuple[str, str]]) -> None:
+    """Один алерт админу со сводкой по всей провалившейся цепочке. С троттлингом."""
+    # классифицируем каждое падение и выбираем главную категорию по приоритету
+    classified = [(src, err, classify_error(err)) for src, err in failures]
+    categories = {c for _, _, c in classified}
+    main_category = next(
+        (c for c in _CATEGORY_PRIORITY if c in categories),
+        "unknown",
+    )
+
+    # если хоть один источник сказал "контент недоступен" (гео-блок, копирайт, приват) —
+    # видео и не скачается ничем, а бот-детект на другом IP тут вторичен. Админу знать незачем
+    content_issue = categories & _SILENT_CATEGORIES
+    if content_issue:
+        logger.info(
+            "Скачивание провалилось по контенту (%s) — алерт не шлём",
+            ", ".join(sorted(content_issue)),
+        )
         return
 
-    # WARP заблокирован YouTube — перезапускаем для получения нового IP
-    if source == "warp" and category == "ip_blocked":
-        from bot.utils.docker import restart_warp
-        restarted = await restart_warp()
-        if restarted:
-            logger.info("WARP перезапущен после ip_blocked")
-
-    throttle_key = f"{source}:{category}"
-    last = _last_fallback_alert.get(throttle_key, 0)
+    now = time.time()
+    last = _last_fallback_alert.get(main_category, 0)
     if now - last < _FALLBACK_ALERT_THROTTLE:
         return
-    _last_fallback_alert[throttle_key] = now
+    _last_fallback_alert[main_category] = now
 
-    # обрезаем длинный traceback
-    short_error = error[:300] + "..." if len(error) > 300 else error
-    category_label = _ERROR_CATEGORY_LABELS.get(category, category)
-
-    warp_note = ""
-    if source == "warp" and category == "ip_blocked":
-        warp_note = "\n\n♻️ <i>WARP контейнер перезапущен для смены IP</i>"
+    # сводка по источникам: что именно вернул каждый
+    lines = "\n".join(
+        f"• <b>{src}</b> — {_ERROR_CATEGORY_LABELS.get(cat, cat)}"
+        for src, _, cat in classified
+    )
+    # текст последней ошибки — по ней обычно и понятно, что чинить
+    # экранируем: в ошибках бывают URL с & и <, Telegram на них ругается и не шлёт сообщение
+    last_error = classified[-1][1]
+    short_error = last_error[:300] + "..." if len(last_error) > 300 else last_error
+    short_error = html.escape(short_error)
 
     text = (
-        f"{E['warning']} <b>Источник упал!</b>\n\n"
-        f"<b>Источник:</b> {source}\n"
-        f"<b>Категория:</b> {category_label}\n"
-        f"<b>Ошибка:</b> <code>{short_error}</code>"
-        f"{warp_note}"
+        f"{E['warning']} <b>Скачивание провалилось</b>\n"
+        f"<i>Не сработал ни один источник</i>\n\n"
+        f"{lines}\n\n"
+        f"<b>Последняя ошибка:</b>\n<code>{short_error}</code>"
     )
 
     for admin_id in settings.admin_id_list:
         try:
             await _bot_ref.send_message(admin_id, text, parse_mode="HTML")
-            logger.info("Админ %s уведомлён о падении %s (%s)", admin_id, source, category)
+            logger.info("Админ %s уведомлён о полном провале цепочки (%s)", admin_id, main_category)
         except Exception as e:
             logger.warning("Не удалось уведомить админа %s: %s", admin_id, e)
 
