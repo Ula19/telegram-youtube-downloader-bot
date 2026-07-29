@@ -26,6 +26,23 @@ class Settings(BaseSettings):
     # прокси для YouTube (резидентный IP)
     proxy_url: str = ""
 
+    # ==================== WARP-ПУЛ + PO-TOKEN ====================
+    # PO-token провайдер (bgutil) — снимает "Sign in to confirm you're not a bot"
+    # без cookies. Пустая строка = PO-token выключен.
+    bgutil_base_url: str = "http://bgutil:4416"
+
+    # WARP-пул: несколько контейнеров WARP с разными exit-IP (round-robin + кулдаун).
+    # warp_proxies (через запятую) переопределяет автосписок из warp_pool_size.
+    warp_proxies: str = ""
+    warp_pool_size: int = 5
+    # сколько WARP-эндпоинтов (разных IP) перебрать перед уходом на proxy/cookies
+    warp_max_tries: int = 3
+    # WARP-пул — основной источник (резидентный прокси уходит в конец цепочки).
+    # false → вернуть старое поведение (резидентный прокси primary для HD).
+    warp_primary: bool = True
+    # на сколько секунд выводить WARP-эндпоинт из ротации после ip_blocked
+    warp_cooldown_seconds: int = 1800
+
     # кэш скачива��ий (дни)
     cache_ttl_days: int = 1
 
@@ -47,6 +64,18 @@ class Settings(BaseSettings):
         if not self.admin_ids:
             return []
         return [int(x.strip()) for x in self.admin_ids.split(",") if x.strip()]
+
+    @property
+    def warp_proxy_list(self) -> list[str]:
+        """Список WARP SOCKS5-эндпоинтов для пула.
+        Явный warp_proxies приоритетнее; иначе — warp1..warpN:9091 по имени сервиса.
+        """
+        if self.warp_proxies.strip():
+            return [p.strip() for p in self.warp_proxies.split(",") if p.strip()]
+        return [
+            f"socks5://warp{i}:9091"
+            for i in range(1, max(1, self.warp_pool_size) + 1)
+        ]
 
     @property
     def db_url(self) -> str:

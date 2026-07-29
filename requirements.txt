@@ -3,8 +3,11 @@ aiogram==3.26.0
 SQLAlchemy==2.0.38
 asyncpg==0.30.0
 alembic==1.14.1
-yt-dlp>=2025.3.31
+yt-dlp>=2025.5.22
 pydantic-settings==2.8.1
+
+# PO-token: плагин yt-dlp, общается по HTTP с контейнером bgutil (снимает бот-детект без cookies)
+bgutil-ytdlp-pot-provider>=1.0.0
 
 # Утилиты
 aiofiles==24.1.0
