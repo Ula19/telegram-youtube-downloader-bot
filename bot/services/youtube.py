@@ -51,6 +51,7 @@ class DownloadResult:
     width: int | None = None
     height: int | None = None
     format_key: str = ""  # video_360, video_720, audio
+    thumb_path: str | None = None  # превью для Telegram (JPEG <=320px)
 
 
 # тип для callback прогресса: (скачано_мб, всего_мб, процент)
@@ -732,6 +733,9 @@ class YouTubeDownloader:
             # m4a приоритет; webm/opus как fallback если m4a недоступен
             "format": "bestaudio[ext=m4a]/bestaudio",
             "outtmpl": output_template,
+            # обложка ролика — у аудио своего кадра нет, а без превью
+            # Telegram рисует пустой квадрат
+            "writethumbnail": True,
         }
 
         loop = asyncio.get_event_loop()
@@ -751,6 +755,7 @@ class YouTubeDownloader:
             title=info.get("title", "YouTube Audio"),
             duration=info.get("duration"),
             format_key="audio",
+            thumb_path=self._find_downloaded_thumb(file_path),
         )
 
     def _check_size(self, result: DownloadResult) -> DownloadResult:
@@ -791,6 +796,8 @@ class YouTubeDownloader:
             "format": format_str,
             "outtmpl": output_template,
             "merge_output_format": "mp4",
+            # обложка ролика — основной источник превью (кадр из видео бывает чёрным)
+            "writethumbnail": True,
         }
 
         loop = asyncio.get_event_loop()
@@ -802,14 +809,19 @@ class YouTubeDownloader:
         if not file_path or not os.path.exists(file_path):
             raise RuntimeError("Не удалось найти скачанный видеофайл")
 
+        duration = info.get("duration")
         return DownloadResult(
             file_path=file_path,
             media_type="video",
             title=info.get("title", "YouTube Video"),
-            duration=info.get("duration"),
+            duration=duration,
             width=info.get("width"),
             height=info.get("height"),
             format_key=f"video_{quality}",
+            thumb_path=(
+                self._find_downloaded_thumb(file_path)
+                or self.make_video_thumb(file_path, duration)
+            ),
         )
 
     def _extract_info(self, url: str, opts: dict) -> dict:
@@ -868,8 +880,120 @@ class YouTubeDownloader:
                 return os.path.join(self.download_dir, filename)
         return None
 
+    # ---------- превью для Telegram ----------
+
+    # Telegram принимает превью только как JPEG со сторонами <= 320px и весом <= 200 КБ.
+    # Без него он берёт ПЕРВЫЙ кадр видео, а он часто чёрный (фейд, заставка) —
+    # в чате получался чёрный прямоугольник вместо обложки.
+    _THUMB_MAX_SIDE = 320
+    _THUMB_MAX_BYTES = 200 * 1024
+    _THUMB_SCALE = "scale=w=320:h=320:force_original_aspect_ratio=decrease"
+
+    def _run_ffmpeg(self, args: list[str], timeout: int = 30) -> bool:
+        """Запускает ffmpeg. Возвращает True при успехе. Ошибки не пробрасывает —
+        превью необязательно, без него отправка всё равно должна пройти.
+        """
+        import subprocess
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-loglevel", "error", *args],
+                capture_output=True, timeout=timeout, check=True,
+            )
+            return True
+        except Exception as e:
+            logger.warning("ffmpeg не отработал (%s): %s", args[-1], e)
+            return False
+
+    def _finalize_thumb(self, path: str) -> str | None:
+        """Проверяет, что превью получилось и влезает в лимит Telegram."""
+        if not os.path.isfile(path):
+            return None
+        size = os.path.getsize(path)
+        if 0 < size <= self._THUMB_MAX_BYTES:
+            return path
+        logger.warning("Превью не влезло в лимит (%d байт) — отправим без него", size)
+        self._remove_file(path)
+        return None
+
+    # ниже этой средней яркости кадр считаем чёрным (0..255)
+    _THUMB_MIN_BRIGHTNESS = 16.0
+
+    def _frame_brightness(self, path: str) -> float:
+        """Средняя яркость картинки. -1, если измерить не вышло."""
+        import subprocess
+        try:
+            out = subprocess.run(
+                ["ffmpeg", "-i", path, "-vf",
+                 "signalstats,metadata=print:key=lavfi.signalstats.YAVG",
+                 "-f", "null", "-"],
+                capture_output=True, text=True, timeout=20,
+            ).stderr
+            for line in out.splitlines():
+                if "YAVG" in line:
+                    return float(line.split("=")[-1])
+        except Exception:
+            pass
+        return -1.0
+
+    def make_video_thumb(self, video_path: str, duration: int | None) -> str | None:
+        """Кадр из видео — фолбэк, когда обложку ролика скачать не удалось.
+
+        Первый кадр брать нельзя: у роликов начало часто чёрное (фейд, заставка) —
+        именно поэтому в чате был чёрный прямоугольник. Пробуем несколько моментов
+        и берём первый, который не оказался чёрным.
+        """
+        thumb = os.path.splitext(video_path)[0] + "_thumb.jpg"
+        if duration and duration > 4:
+            offsets = [min(max(duration * f, 2.0), 600.0) for f in (0.1, 0.3, 0.5)]
+        else:
+            offsets = [1.0, 0.0]
+
+        for offset in offsets:
+            ok = self._run_ffmpeg([
+                "-ss", f"{offset:.1f}", "-i", video_path,
+                "-frames:v", "1", "-vf", self._THUMB_SCALE, "-q:v", "5", thumb,
+            ])
+            if not ok or not os.path.isfile(thumb):
+                continue
+            brightness = self._frame_brightness(thumb)
+            if brightness < 0 or brightness >= self._THUMB_MIN_BRIGHTNESS:
+                return self._finalize_thumb(thumb)
+            logger.info("Кадр на %.1fs чёрный (яркость %.1f) — пробую позже", offset, brightness)
+
+        # все кадры тёмные — отдаём последний, он всё равно лучше пустого квадрата
+        return self._finalize_thumb(thumb)
+
+    def _convert_thumb(self, src: str, dst: str) -> str | None:
+        """Обложку с YouTube (webp/png) → JPEG нужного размера."""
+        ok = self._run_ffmpeg(["-i", src, "-vf", self._THUMB_SCALE, "-q:v", "5", dst])
+        return self._finalize_thumb(dst) if ok else None
+
+    def _find_downloaded_thumb(self, media_path: str) -> str | None:
+        """Ищет обложку ролика, скачанную yt-dlp рядом с файлом (writethumbnail),
+        и приводит её к формату Telegram.
+
+        Это предпочтительный источник превью: обложка совпадает с той, что юзер
+        видел на YouTube, и она гарантированно не чёрная — в отличие от кадра из
+        начала видео.
+        """
+        base = os.path.splitext(media_path)[0]
+        dst = f"{base}_thumb.jpg"
+        thumb = None
+        for ext in ("jpg", "jpeg", "png", "webp"):
+            src = f"{base}.{ext}"
+            if not os.path.isfile(src):
+                continue
+            # если формат не сконвертировался (например, нет декодера webp) —
+            # не сдаёмся, пробуем следующий файл
+            if thumb is None:
+                thumb = self._convert_thumb(src, dst)
+            self._remove_file(src)  # оригинал больше не нужен
+        return thumb
+
     def cleanup(self, result: DownloadResult) -> None:
         self._remove_file(result.file_path)
+        if result.thumb_path:
+            self._remove_file(result.thumb_path)
 
     def _remove_file(self, path: str) -> None:
         try:

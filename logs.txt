@@ -1,0 +1,426 @@
+root@6409732:/home/tg_bots/downloaders/bot_4_youtube/bot_upload_youtube# docker compose logs bot -f
+bot-1  | 2026-08-26 07:49:47,603 [INFO] __main__: Local Bot API: http://bot-api:8081
+bot-1  | 2026-08-26 07:49:47,908 [INFO] bot.services.youtube: WARP-пул (5 эндпоинтов, primary=True): 
+socks5://warp1:9091, socks5://warp2:9091, socks5://warp3:9091, socks5://warp4:9091, socks5://warp5:9091
+bot-1  | 2026-08-26 07:49:47,909 [INFO] bot.services.youtube: Резидентный прокси (fallback): 
+socks5://176.103.228.90:48403
+bot-1  | 2026-08-26 07:49:47,909 [INFO] bot.services.youtube: PO-token (bgutil): http://bgutil:4416
+bot-1  | 2026-08-26 07:49:47,909 [INFO] bot.services.youtube: Cookies: найдены (fallback)
+bot-1  | 2026-08-26 07:49:47,918 [INFO] bot.handlers.download: Алерты о падении источников подключены
+bot-1  | 2026-08-26 07:49:47,921 [INFO] __main__: Запуск polling...
+bot-1  | 2026-08-26 07:49:48,018 [INFO] __main__: Таблицы БД созданы
+bot-1  | 2026-08-26 07:49:48,019 [INFO] __main__: Фоновая очистка запущена (интервал 5 мин)
+bot-1  | 2026-08-26 07:49:48,030 [INFO] __main__: Бот @novogram_youtube_bot запущен!
+bot-1  | 2026-08-26 07:49:48,040 [INFO] bot.services.youtube: JS-рантайм (deno) доступен: deno 2.9.5 (stable, 
+release, x86_64-unknown-linux-gnu)
+bot-1  | 2026-08-26 07:49:48,050 [INFO] bot.services.youtube: PO-token провайдер доступен 
+(http://bgutil:4416/ping, HTTP 200)
+bot-1  | 2026-08-26 07:49:48,077 [INFO] __main__: Дефолтное меню команд установлено
+bot-1  | 2026-08-26 07:49:48,077 [INFO] aiogram.dispatcher: Start polling
+bot-1  | 2026-08-26 07:49:48,078 [INFO] aiogram.dispatcher: Run polling for bot @novogram_youtube_bot 
+id=8992604916 - 'YouTube • NovaGram'
+bot-1  | 2026-08-26 07:51:58,258 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:51:58,262 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:51:58,266 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:51:58,269 [WARNING] bot.services.youtube: yt-dlp: [youtube] PD23Ld_DHaY: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:51:58,274 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:51:58,279 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:51:58,283 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:51:58,300 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] PD23Ld_DHaY: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:51:58,300 [WARNING] bot.services.youtube: warp не дал инфо: ERROR: [youtube] PD23Ld_DHaY: 
+Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno 
+-3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:51:58,301 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+PD23Ld_DHaY: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:51:58,420 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:51:58,423 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:51:58,426 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:51:58,429 [WARNING] bot.services.youtube: yt-dlp: [youtube] PD23Ld_DHaY: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:51:58,434 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:51:58,438 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:51:58,442 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:51:58,450 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] PD23Ld_DHaY: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:51:58,450 [WARNING] bot.services.youtube: warp не дал инфо: ERROR: [youtube] PD23Ld_DHaY: 
+Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno 
+-3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:51:58,450 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+PD23Ld_DHaY: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:52:00,545 [INFO] bot.services.youtube: [METRIC] get_info 2.68s source=proxy 
+routing=warp_first url=https://www.youtube.com/shorts/PD23Ld_DHaY
+bot-1  | 2026-08-26 07:52:00,600 [INFO] aiogram.event: Update id=151439064 is handled. Duration 2808 ms by bot 
+id=8992604916
+bot-1  | 2026-08-26 07:52:02,195 [INFO] aiogram.event: Update id=151439065 is handled. Duration 128 ms by bot 
+id=8992604916
+bot-1  | 2026-08-26 07:52:03,332 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (1/3)...
+bot-1  | 2026-08-26 07:52:03,336 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (2/3)...
+bot-1  | 2026-08-26 07:52:03,338 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (3/3)...
+bot-1  | 2026-08-26 07:52:03,341 [WARNING] bot.services.youtube: yt-dlp: [youtube] PD23Ld_DHaY: Unable to 
+download webpage: [Errno 111] Connection refused (caused by TransportError('[Errno 111] Connection refused')). 
+Giving up after 3 retries
+bot-1  | 2026-08-26 07:52:03,346 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (1/3)...
+bot-1  | 2026-08-26 07:52:03,350 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (2/3)...
+bot-1  | 2026-08-26 07:52:03,355 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (3/3)...
+bot-1  | 2026-08-26 07:52:03,364 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] PD23Ld_DHaY: Unable to 
+download API page: [Errno 111] Connection refused (caused by TransportError('[Errno 111] Connection refused'))
+bot-1  | 2026-08-26 07:52:03,365 [WARNING] bot.services.youtube: warp не сработал (download_video): ERROR: 
+[youtube] PD23Ld_DHaY: Unable to download API page: [Errno 111] Connection refused (caused by 
+TransportError('[Errno 111] Connection refused'))
+bot-1  | 2026-08-26 07:52:03,366 [WARNING] bot.handlers.download: Источник warp упал (network): ERROR: [youtube] 
+PD23Ld_DHaY: Unable to download API page: [Errno 111] Connection refused (caused by TransportError('[Errno 111] 
+Connection refused'))
+bot-1  | 2026-08-26 07:52:03,479 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (1/3)...
+bot-1  | 2026-08-26 07:52:03,481 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (2/3)...
+bot-1  | 2026-08-26 07:52:03,483 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (3/3)...
+bot-1  | 2026-08-26 07:52:03,485 [WARNING] bot.services.youtube: yt-dlp: [youtube] PD23Ld_DHaY: Unable to 
+download webpage: [Errno 111] Connection refused (caused by TransportError('[Errno 111] Connection refused')). 
+Giving up after 3 retries
+bot-1  | 2026-08-26 07:52:03,489 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (1/3)...
+bot-1  | 2026-08-26 07:52:03,492 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (2/3)...
+bot-1  | 2026-08-26 07:52:03,494 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (3/3)...
+bot-1  | 2026-08-26 07:52:03,501 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] PD23Ld_DHaY: Unable to 
+download API page: [Errno 111] Connection refused (caused by TransportError('[Errno 111] Connection refused'))
+bot-1  | 2026-08-26 07:52:03,501 [WARNING] bot.services.youtube: warp не сработал (download_video): ERROR: 
+[youtube] PD23Ld_DHaY: Unable to download API page: [Errno 111] Connection refused (caused by 
+TransportError('[Errno 111] Connection refused'))
+bot-1  | 2026-08-26 07:52:03,502 [WARNING] bot.handlers.download: Источник warp упал (network): ERROR: [youtube] 
+PD23Ld_DHaY: Unable to download API page: [Errno 111] Connection refused (caused by TransportError('[Errno 111] 
+Connection refused'))
+bot-1  | 2026-08-26 07:52:03,621 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (1/3)...
+bot-1  | 2026-08-26 07:52:03,623 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (2/3)...
+bot-1  | 2026-08-26 07:52:03,624 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (3/3)...
+bot-1  | 2026-08-26 07:52:03,626 [WARNING] bot.services.youtube: yt-dlp: [youtube] PD23Ld_DHaY: Unable to 
+download webpage: [Errno 111] Connection refused (caused by TransportError('[Errno 111] Connection refused')). 
+Giving up after 3 retries
+bot-1  | 2026-08-26 07:52:03,629 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (1/3)...
+bot-1  | 2026-08-26 07:52:03,632 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (2/3)...
+bot-1  | 2026-08-26 07:52:03,636 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno 111] Connection 
+refused. Retrying (3/3)...
+bot-1  | 2026-08-26 07:52:03,645 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] PD23Ld_DHaY: Unable to 
+download API page: [Errno 111] Connection refused (caused by TransportError('[Errno 111] Connection refused'))
+bot-1  | 2026-08-26 07:52:03,646 [WARNING] bot.services.youtube: warp не сработал (download_video): ERROR: 
+[youtube] PD23Ld_DHaY: Unable to download API page: [Errno 111] Connection refused (caused by 
+TransportError('[Errno 111] Connection refused'))
+bot-1  | 2026-08-26 07:52:03,646 [WARNING] bot.handlers.download: Источник warp упал (network): ERROR: [youtube] 
+PD23Ld_DHaY: Unable to download API page: [Errno 111] Connection refused (caused by TransportError('[Errno 111] 
+Connection refused'))
+bot-1  | 2026-08-26 07:52:04,861 [WARNING] bot.services.youtube: yt-dlp: [youtube] unable to extract yt initial 
+data; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue 
+template. Confirm you are on the latest version using  yt-dlp -U
+bot-1  | 2026-08-26 07:52:04,861 [WARNING] bot.services.youtube: yt-dlp: [youtube] Incomplete data received in 
+embedded initial data; re-fetching using API.
+bot-1  | 2026-08-26 07:52:06,835 [INFO] bot.services.youtube: [METRIC] download_video 3.66s source=proxy 
+routing=warp_first quality=720 size=5.2MB speed=1.4MB/s
+bot-1  | 2026-08-26 07:52:07,686 [INFO] bot.handlers.download: [METRIC] upload_video 0.80s size=5.2MB 
+speed=6.5MB/s
+bot-1  | 2026-08-26 07:52:07,742 [INFO] bot.services.youtube: Удалён: /tmp/yt_bot_swsl49ln/PD23Ld_DHaY_720p.mp4
+bot-1  | 2026-08-26 07:52:07,742 [INFO] aiogram.event: Update id=151439066 is handled. Duration 4688 ms by bot 
+id=8992604916
+bot-1  | 2026-08-26 07:53:35,563 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:35,567 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:35,570 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:35,572 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:35,577 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:35,581 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:35,585 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:35,594 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:35,594 [WARNING] bot.services.youtube: warp не дал инфо: ERROR: [youtube] izlX86rUDks: 
+Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno 
+-3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:35,595 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:35,712 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:35,714 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:35,718 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:35,732 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:35,739 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:35,744 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:35,748 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:35,758 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:35,760 [WARNING] bot.services.youtube: warp не дал инфо: ERROR: [youtube] izlX86rUDks: 
+Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno 
+-3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:35,760 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:37,435 [WARNING] bot.services.youtube: yt-dlp: [youtube] [pot:bgutil:http] The provider 
+plugin and the HTTP server are on different versions, this may cause compatibility issues. Please ensure they are 
+on the same version. Otherwise, help will NOT be provided for any issues that arise. (plugin: 1.3.2, HTTP server: 
+1.3.1)
+bot-1  | 2026-08-26 07:53:37,717 [INFO] bot.services.youtube: [METRIC] get_info 2.28s source=proxy 
+routing=warp_first url=https://www.youtube.com/shorts/izlX86rUDks
+bot-1  | 2026-08-26 07:53:37,864 [INFO] aiogram.event: Update id=151439067 is handled. Duration 2537 ms by bot 
+id=8992604916
+bot-1  | 2026-08-26 07:53:39,448 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:39,452 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:39,457 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:39,463 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:39,468 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:39,473 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:39,477 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:39,485 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:39,485 [WARNING] bot.services.youtube: warp не сработал (download_audio): ERROR: 
+[youtube] izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:39,485 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:39,603 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:39,608 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:39,613 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:39,619 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:39,628 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:39,635 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:39,642 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:39,651 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:39,652 [WARNING] bot.services.youtube: warp не сработал (download_audio): ERROR: 
+[youtube] izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:39,652 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:39,766 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:39,770 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:39,773 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:39,776 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:39,780 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:39,784 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:39,788 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:39,797 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:39,797 [WARNING] bot.services.youtube: warp не сработал (download_audio): ERROR: 
+[youtube] izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:39,797 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:42,197 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:42,202 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:42,204 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:42,207 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:42,213 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:42,219 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:42,223 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:42,232 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:42,233 [WARNING] bot.services.youtube: warp не дал инфо: ERROR: [youtube] izlX86rUDks: 
+Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno 
+-3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:42,234 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:42,350 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:42,354 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:42,356 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:42,359 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:42,364 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:42,368 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:42,373 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:42,380 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:42,381 [WARNING] bot.services.youtube: warp не дал инфо: ERROR: [youtube] izlX86rUDks: 
+Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno 
+-3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:42,381 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:42,800 [INFO] bot.services.youtube: [METRIC] download_audio 3.47s source=proxy 
+routing=warp_first quality=m4a size=0.3MB speed=0.1MB/s
+bot-1  | 2026-08-26 07:53:43,185 [INFO] bot.handlers.download: [METRIC] upload_audio 0.28s size=0.3MB 
+speed=0.9MB/s
+bot-1  | 2026-08-26 07:53:43,225 [INFO] bot.services.youtube: Удалён: /tmp/yt_bot_swsl49ln/izlX86rUDks_audio.m4a
+bot-1  | 2026-08-26 07:53:43,225 [INFO] aiogram.event: Update id=151439068 is handled. Duration 3978 ms by bot 
+id=8992604916
+bot-1  | 2026-08-26 07:53:44,168 [INFO] bot.services.youtube: [METRIC] get_info 2.12s source=proxy 
+routing=warp_first url=https://www.youtube.com/shorts/izlX86rUDks
+bot-1  | 2026-08-26 07:53:44,212 [INFO] aiogram.event: Update id=151439069 is handled. Duration 2472 ms by bot 
+id=8992604916
+bot-1  | 2026-08-26 07:53:46,013 [INFO] aiogram.event: Update id=151439070 is handled. Duration 53 ms by bot 
+id=8992604916
+bot-1  | 2026-08-26 07:53:48,962 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:48,966 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:48,970 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:48,973 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:48,979 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:48,983 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:48,987 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:48,994 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:48,995 [WARNING] bot.services.youtube: warp не сработал (download_video): ERROR: 
+[youtube] izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:48,995 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:49,115 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:49,119 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:49,122 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:49,124 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:49,130 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:49,135 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:49,140 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:49,149 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:49,149 [WARNING] bot.services.youtube: warp не сработал (download_video): ERROR: 
+[youtube] izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:49,150 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:49,268 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:49,271 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:49,275 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:49,278 [WARNING] bot.services.youtube: yt-dlp: [youtube] izlX86rUDks: Unable to 
+download webpage: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] Temporary 
+failure in name resolution')). Giving up after 3 retries
+bot-1  | 2026-08-26 07:53:49,283 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (1/3)...
+bot-1  | 2026-08-26 07:53:49,287 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (2/3)...
+bot-1  | 2026-08-26 07:53:49,291 [WARNING] bot.services.youtube: yt-dlp: [youtube] [Errno -3] Temporary failure 
+in name resolution. Retrying (3/3)...
+bot-1  | 2026-08-26 07:53:49,300 [ERROR] bot.services.youtube: yt-dlp: ERROR: [youtube] izlX86rUDks: Unable to 
+download API page: [Errno -3] Temporary failure in name resolution (caused by TransportError('[Errno -3] 
+Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:49,301 [WARNING] bot.services.youtube: warp не сработал (download_video): ERROR: 
+[youtube] izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:49,301 [WARNING] bot.handlers.download: Источник warp упал (unknown): ERROR: [youtube] 
+izlX86rUDks: Unable to download API page: [Errno -3] Temporary failure in name resolution (caused by 
+TransportError('[Errno -3] Temporary failure in name resolution'))
+bot-1  | 2026-08-26 07:53:51,748 [INFO] bot.services.youtube: [METRIC] download_video 2.93s source=proxy 
+routing=warp_first quality=720 size=2.9MB speed=1.0MB/s
+bot-1  | 2026-08-26 07:53:52,278 [INFO] bot.handlers.download: [METRIC] upload_video 0.49s size=2.9MB 
+speed=5.9MB/s
+bot-1  | 2026-08-26 07:53:52,310 [INFO] bot.services.youtube: Удалён: /tmp/yt_bot_swsl49ln/izlX86rUDks_720p.mp4
+bot-1  | 2026-08-26 07:53:52,310 [INFO] aiogram.event: Update id=151439071 is handled. Duration 3547 ms by bot 
+id=8992604916
+bot-1  | 2026-08-26 07:54:48,025 [INFO] __main__: Фоновая очистка: удалено 2 записей rate limit
+

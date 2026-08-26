@@ -391,6 +391,8 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
     Через Local Bot API — файлы до 2 ГБ без ограничений.
     """
     file = FSInputFile(result.file_path)
+    # превью: без него Telegram берёт первый кадр видео, а он часто чёрный
+    thumb = FSInputFile(result.thumb_path) if getattr(result, "thumb_path", None) else None
 
     # Уведомляем пользователя перед долгой отправкой
     if status_msg:
@@ -413,6 +415,8 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
             duration=int(result.duration) if result.duration else None,
             width=result.width,
             height=result.height,
+            thumbnail=thumb,
+            supports_streaming=True,  # без него Telegram не даёт перемотку до загрузки
         )
         _log_upload_metric("video", t_upload, size_mb)
         return sent.video.file_id
@@ -424,6 +428,7 @@ async def _send_media(message: Message, result, status_msg=None, lang="ru") -> s
             caption=f"{E['audio']} {result.title}{promo}",
             duration=int(result.duration) if result.duration else None,
             title=result.title,
+            thumbnail=thumb,
         )
         _log_upload_metric("audio", t_upload, size_mb)
         return sent.audio.file_id
