@@ -159,6 +159,12 @@ def classify_error(error_msg: str) -> str:
         or "unreachable" in msg
         or "socks" in msg
         or "giving up after" in msg
+        # мёртвый SOCKS-эндпоинт: контейнер не резолвится или порт не слушает
+        or "name resolution" in msg
+        or "getaddrinfo" in msg
+        or "errno -3" in msg
+        or "errno 111" in msg
+        or "refused" in msg
         or "internal server error" in msg
         or "bad gateway" in msg
         or "service unavailable" in msg
