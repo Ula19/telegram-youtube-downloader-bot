@@ -46,6 +46,7 @@ _ERROR_CATEGORY_LABELS = {
     "cookies_expired": "Cookies протухли — обнови через /update_cookies",
     "ip_blocked": "YouTube заблокировал IP — WARP-эндпоинт ушёл в кулдаун",
     "expired_url": "Протухшая ссылка на видео (403) — n-challenge или PO-token",
+    "no_formats": "Форматы не извлеклись — проверь deno (JS-рантайм) и bgutil (PO-token)",
     "age_restricted": "Возрастное ограничение — нужны cookies залогиненного аккаунта",
     "network": "Сетевая ошибка (таймаут или 5xx у прокси/CDN)",
     "geo_blocked": "Видео заблокировано по стране или правообладателем",
@@ -58,6 +59,7 @@ _SILENT_CATEGORIES = {"unavailable", "geo_blocked"}
 
 # что важнее показать админу, когда упало несколько источников с разными ошибками
 _CATEGORY_PRIORITY = [
+    "no_formats",
     "ip_blocked",
     "cookies_expired",
     "network",

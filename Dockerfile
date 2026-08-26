@@ -10,7 +10,10 @@ RUN curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x8
     -o /tmp/deno.zip && \
     unzip /tmp/deno.zip -d /usr/local/bin/ && \
     chmod +x /usr/local/bin/deno && \
-    rm /tmp/deno.zip
+    rm /tmp/deno.zip && \
+    # без рабочего deno yt-dlp не решит n-challenge и вернёт пустой список форматов —
+    # пусть это ломает сборку, а не всплывает потом как "Requested format is not available"
+    deno --version
 
 WORKDIR /app
 

@@ -135,6 +135,7 @@ async def main() -> None:
         # best-effort проверка PO-token провайдера (не блокирует старт)
         from bot.services.youtube import downloader as yt_downloader
         asyncio.create_task(yt_downloader.check_pot_provider())
+        asyncio.create_task(yt_downloader.check_js_runtime())
 
         bot_info = await bot.get_me()
         logger.info(f"Бот @{bot_info.username} запущен!")

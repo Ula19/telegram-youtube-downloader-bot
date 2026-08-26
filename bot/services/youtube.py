@@ -69,7 +69,7 @@ _CONTENT_CATEGORIES = {"unavailable", "geo_blocked"}
 def classify_error(error_msg: str) -> str:
     """Классифицирует ошибку yt-dlp в категорию для осмысленных алертов.
     Возвращает: 'geo_blocked', 'unavailable', 'age_restricted', 'ip_blocked',
-    'expired_url', 'cookies_expired', 'network', 'unknown'.
+    'no_formats', 'expired_url', 'cookies_expired', 'network', 'unknown'.
     Порядок проверок важен — сначала контентные ошибки, потом инфраструктурные.
     """
     msg = error_msg.lower()
@@ -87,7 +87,8 @@ def classify_error(error_msg: str) -> str:
     ):
         return "geo_blocked"
 
-    # 2. видео недоступно навсегда — ни один источник не поможет, выходим сразу
+    # 2. видео недоступно навсегда — ни один источник не поможет, выходим сразу.
+    # сюда же завершённые трансляции: у них форматов уже нет, перебирать цепочку незачем
     if (
         "video unavailable" in msg
         or "private video" in msg
@@ -98,6 +99,10 @@ def classify_error(error_msg: str) -> str:
         or "members-only" in msg
         or "join this channel" in msg
         or "http error 404" in msg
+        or "live event has ended" in msg
+        or "live event will begin" in msg
+        or "premieres in" in msg
+        or "this live stream recording is not available" in msg
     ):
         return "unavailable"
 
@@ -123,17 +128,30 @@ def classify_error(error_msg: str) -> str:
     ):
         return "ip_blocked"
 
-    # 5. 403 на скачивании сегментов — протухшая подписанная ссылка googlevideo:
+    # 5. yt-dlp не смог извлечь форматы: список пустой, любой селектор мимо.
+    # Обычно ломается JS-рантайм (deno/n-challenge) или PO-token — это НЕ про IP.
+    # Симптом одинаков для видео и аудио и повторяется на всех источниках сразу
+    if (
+        "requested format is not available" in msg
+        or "no video formats found" in msg
+        or "unable to extract player" in msg
+        or "failed to extract any player response" in msg
+        or "nsig extraction failed" in msg
+        or "no supported javascript runtime" in msg
+    ):
+        return "no_formats"
+
+    # 6. 403 на скачивании сегментов — протухшая подписанная ссылка googlevideo:
     # истёк срок, не решён n-challenge (deno) или не сработал PO-token.
     # Это НЕ бан IP: эндпоинт в кулдаун не отправляем и контейнер не рестартим
     if "403" in msg or "forbidden" in msg:
         return "expired_url"
 
-    # 6. cookies протухли (только когда реально использовались куки)
+    # 7. cookies протухли (только когда реально использовались куки)
     if "login required" in msg or "cookies" in msg:
         return "cookies_expired"
 
-    # 7. сеть и транзиентные сбои прокси/CDN (5xx — нода прокси или googlevideo моргнули)
+    # 8. сеть и транзиентные сбои прокси/CDN (5xx — нода прокси или googlevideo моргнули)
     if (
         "timeout" in msg
         or "timed out" in msg
@@ -149,6 +167,31 @@ def classify_error(error_msg: str) -> str:
         return "network"
 
     return "unknown"
+
+
+class _YdlLogger:
+    """Прокидывает сообщения yt-dlp в лог бота.
+
+    В опциях стоят quiet/no_warnings (чтобы yt-dlp не сорил в stdout), но они же
+    глушат важные предупреждения — "No supported JavaScript runtime" (сломан deno)
+    и проблемы с PO-token. Без них в логах остаётся только финальное
+    "Requested format is not available", по которому причину не найти.
+    """
+
+    def debug(self, msg: str) -> None:
+        pass  # отладка yt-dlp слишком шумная
+
+    def info(self, msg: str) -> None:
+        pass
+
+    def warning(self, msg: str) -> None:
+        logger.warning("yt-dlp: %s", msg)
+
+    def error(self, msg: str) -> None:
+        logger.error("yt-dlp: %s", msg)
+
+
+_YDL_LOGGER = _YdlLogger()
 
 
 class WarpPool:
@@ -317,6 +360,34 @@ class YouTubeDownloader:
             logger.warning("Ошибка при очистке: %s", e)
 
     # ---------- PO-token ----------
+
+    async def check_js_runtime(self) -> None:
+        """Best-effort проверка JS-рантайма (deno) при старте — только лог.
+
+        Свежие версии yt-dlp без JS-рантайма не могут решить n-challenge и часто
+        возвращают ПУСТОЙ список форматов. Наружу это выглядит как
+        "Requested format is not available" — одинаково для видео и аудио и сразу
+        на всех источниках. Проверяем явно, чтобы это было видно в логах при старте.
+        """
+        def _probe() -> str:
+            import subprocess
+            out = subprocess.run(
+                ["deno", "--version"], capture_output=True, text=True, timeout=10,
+            )
+            return (out.stdout or out.stderr or "").strip().splitlines()[0] if out.stdout or out.stderr else ""
+
+        loop = asyncio.get_event_loop()
+        try:
+            version = await loop.run_in_executor(None, _probe)
+            logger.info("JS-рантайм (deno) доступен: %s", version or "версия не определена")
+        except FileNotFoundError:
+            logger.error(
+                "JS-рантайм (deno) НЕ НАЙДЕН — yt-dlp не решит n-challenge и вернёт "
+                "пустой список форматов ('Requested format is not available'). "
+                "Проверь установку deno в Dockerfile",
+            )
+        except Exception as e:
+            logger.error("JS-рантайм (deno) не отвечает: %s", e)
 
     def _pot_args(self) -> dict:
         """extractor_args для PO-token провайдера (bgutil). Пусто, если выключен."""
@@ -702,6 +773,10 @@ class YouTubeDownloader:
             f"bestvideo[height<={cap}][width<={cap}][vcodec~='^(avc|h264)']+bestaudio[ext=m4a]"
             f"/bestvideo[height<={cap}][width<={cap}]+bestaudio"
             f"/best[height<={cap}][width<={cap}]"
+            # хвост без ограничений: если под cap не нашлось ничего (например, видео
+            # выложено только в 4K), лучше отдать доступное качество, чем уронить
+            # скачивание в "Requested format is not available"
+            f"/bestvideo+bestaudio"
             f"/best"
         )
 
@@ -733,12 +808,14 @@ class YouTubeDownloader:
 
     def _extract_info(self, url: str, opts: dict) -> dict:
         import yt_dlp
+        opts.setdefault("logger", _YDL_LOGGER)
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=False)
 
     def _download(self, url: str, opts: dict, progress_callback: ProgressCallback = None) -> dict:
         import yt_dlp
 
+        opts.setdefault("logger", _YDL_LOGGER)
         last_update = {"time": 0}
 
         def _hook(d):
