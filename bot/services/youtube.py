@@ -755,7 +755,7 @@ class YouTubeDownloader:
             title=info.get("title", "YouTube Audio"),
             duration=info.get("duration"),
             format_key="audio",
-            thumb_path=self._find_downloaded_thumb(file_path),
+            thumb_path=self.build_thumb(file_path, allow_frame=False),
         )
 
     def _check_size(self, result: DownloadResult) -> DownloadResult:
@@ -818,10 +818,7 @@ class YouTubeDownloader:
             width=info.get("width"),
             height=info.get("height"),
             format_key=f"video_{quality}",
-            thumb_path=(
-                self._find_downloaded_thumb(file_path)
-                or self.make_video_thumb(file_path, duration)
-            ),
+            thumb_path=self.build_thumb(file_path, duration),
         )
 
     def _extract_info(self, url: str, opts: dict) -> dict:
@@ -904,6 +901,25 @@ class YouTubeDownloader:
             logger.warning("ffmpeg не отработал (%s): %s", args[-1], e)
             return False
 
+    def build_thumb(self, media_path: str, duration: int | None = None,
+                    allow_frame: bool = True) -> str | None:
+        """Готовит превью для уже скачанного файла.
+
+        ВАЖНО: превью — косметика. Файл к этому моменту скачан, поэтому любая
+        ошибка здесь гасится: отправим без превью, но отправим. Юзер ошибки не увидит.
+
+        Порядок: обложка ролика (её кладёт yt-dlp рядом) → кадр из самого видео
+        (сеть уже не нужна). allow_frame=False для аудио — там кадра нет.
+        """
+        try:
+            thumb = self._find_downloaded_thumb(media_path)
+            if thumb is None and allow_frame:
+                thumb = self.make_video_thumb(media_path, duration)
+            return thumb
+        except Exception as e:
+            logger.warning("Превью не получилось (%s) — отправляем без него", e)
+            return None
+
     def _finalize_thumb(self, path: str) -> str | None:
         """Проверяет, что превью получилось и влезает в лимит Telegram."""
         if not os.path.isfile(path):
@@ -948,6 +964,11 @@ class YouTubeDownloader:
         else:
             offsets = [1.0, 0.0]
 
+        # старый файл с прошлого скачивания мог остаться — иначе рискуем отдать
+        # его как «своё» превью, даже если ffmpeg сейчас не отработал
+        self._remove_file(thumb)
+
+        produced = False
         for offset in offsets:
             ok = self._run_ffmpeg([
                 "-ss", f"{offset:.1f}", "-i", video_path,
@@ -955,16 +976,18 @@ class YouTubeDownloader:
             ])
             if not ok or not os.path.isfile(thumb):
                 continue
+            produced = True
             brightness = self._frame_brightness(thumb)
             if brightness < 0 or brightness >= self._THUMB_MIN_BRIGHTNESS:
                 return self._finalize_thumb(thumb)
             logger.info("Кадр на %.1fs чёрный (яркость %.1f) — пробую позже", offset, brightness)
 
         # все кадры тёмные — отдаём последний, он всё равно лучше пустого квадрата
-        return self._finalize_thumb(thumb)
+        return self._finalize_thumb(thumb) if produced else None
 
     def _convert_thumb(self, src: str, dst: str) -> str | None:
         """Обложку с YouTube (webp/png) → JPEG нужного размера."""
+        self._remove_file(dst)  # не выдаём за результат файл с прошлого раза
         ok = self._run_ffmpeg(["-i", src, "-vf", self._THUMB_SCALE, "-q:v", "5", dst])
         return self._finalize_thumb(dst) if ok else None
 
